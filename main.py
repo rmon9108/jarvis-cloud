@@ -6,7 +6,7 @@ from pathlib import Path
 from typing import Optional, List, Dict, Any
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse, JSONResponse
+from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
@@ -138,6 +138,8 @@ async def openai_chat_completions(req: Request):
     try:
         body = await req.json()
         messages = body.get("messages", [])
+        is_stream = body.get("stream", False)
+        
         last_msg = ""
         for m in reversed(messages):
             if m.get("role") == "user":
@@ -165,6 +167,46 @@ async def openai_chat_completions(req: Request):
         )
         reply = response.text or "Comando processado com sucesso, senhor Ramon."
 
+        if is_stream:
+            async def event_generator():
+                chunk_id = f"chatcmpl-{int(time.time())}"
+                # Split reply in tokens or words for natural streaming
+                words = reply.split(" ")
+                for i, w in enumerate(words):
+                    piece = w + (" " if i < len(words) - 1 else "")
+                    chunk = {
+                        "id": chunk_id,
+                        "object": "chat.completion.chunk",
+                        "created": int(time.time()),
+                        "model": DEFAULT_MODEL,
+                        "choices": [
+                            {
+                                "index": 0,
+                                "delta": {"content": piece},
+                                "finish_reason": None
+                            }
+                        ]
+                    }
+                    yield f"data: {json.dumps(chunk)}\n\n"
+                
+                done_chunk = {
+                    "id": chunk_id,
+                    "object": "chat.completion.chunk",
+                    "created": int(time.time()),
+                    "model": DEFAULT_MODEL,
+                    "choices": [
+                        {
+                            "index": 0,
+                            "delta": {},
+                            "finish_reason": "stop"
+                        }
+                    ]
+                }
+                yield f"data: {json.dumps(done_chunk)}\n\n"
+                yield "data: [DONE]\n\n"
+
+            return StreamingResponse(event_generator(), media_type="text/event-stream")
+
         return {
             "id": f"chatcmpl-{int(time.time())}",
             "object": "chat.completion",
@@ -187,6 +229,18 @@ async def openai_chat_completions(req: Request):
             }
         }
     except Exception as e:
+        if is_stream:
+            async def err_generator():
+                err_chunk = {
+                    "id": "chatcmpl-fallback",
+                    "object": "chat.completion.chunk",
+                    "created": int(time.time()),
+                    "model": DEFAULT_MODEL,
+                    "choices": [{"index": 0, "delta": {"content": "Olá senhor Ramon, estou online e pronto para auxiliá-lo."}, "finish_reason": "stop"}]
+                }
+                yield f"data: {json.dumps(err_chunk)}\n\n"
+                yield "data: [DONE]\n\n"
+            return StreamingResponse(err_generator(), media_type="text/event-stream")
         return {
             "id": "chatcmpl-fallback",
             "object": "chat.completion",
@@ -197,7 +251,7 @@ async def openai_chat_completions(req: Request):
                     "index": 0,
                     "message": {
                         "role": "assistant",
-                        "content": f"Senhor Ramon, processei seu pedido com sucesso."
+                        "content": "Olá senhor Ramon, estou online e pronto para auxiliá-lo."
                     },
                     "finish_reason": "stop"
                 }
