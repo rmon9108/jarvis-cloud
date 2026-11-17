@@ -120,6 +120,91 @@ def torvis_link_sync():
     return {"ok": True, "synced": True}
 
 # ==========================================
+# 2.1 OpenAI / Torvis Compatible LLM Endpoints
+# ==========================================
+@app.get("/v1/models")
+def list_models():
+    return {
+        "object": "list",
+        "data": [
+            {"id": "gemini-3.5-flash-lite", "object": "model", "owned_by": "ramon"},
+            {"id": "gemini-2.5-flash", "object": "model", "owned_by": "ramon"},
+            {"id": "default", "object": "model", "owned_by": "ramon"}
+        ]
+    }
+
+@app.post("/v1/chat/completions")
+async def openai_chat_completions(req: Request):
+    try:
+        body = await req.json()
+        messages = body.get("messages", [])
+        last_msg = ""
+        for m in reversed(messages):
+            if m.get("role") == "user":
+                last_msg = m.get("content", "")
+                break
+        if not last_msg and messages:
+            last_msg = messages[-1].get("content", "")
+
+        from google import genai
+        client = genai.Client(api_key=DEFAULT_GEMINI_KEY)
+        system_instruction = (
+            "Você é Jarvis, o assistente pessoal de inteligência artificial de elite dedicado exclusivamente ao senhor Ramon. "
+            "Sempre trate o usuário cordialmente como 'senhor Ramon' ou 'senhor'. "
+            "Seja prestativo, perspicaz, preciso, conciso e execute ações com prontidão. "
+            "Responda em português brasileiro de forma natural, profissional e elegante."
+        )
+
+        response = client.models.generate_content(
+            model=DEFAULT_MODEL,
+            contents=last_msg or "Olá",
+            config={
+                "system_instruction": system_instruction,
+                "temperature": 0.5
+            }
+        )
+        reply = response.text or "Comando processado com sucesso, senhor Ramon."
+
+        return {
+            "id": f"chatcmpl-{int(time.time())}",
+            "object": "chat.completion",
+            "created": int(time.time()),
+            "model": DEFAULT_MODEL,
+            "choices": [
+                {
+                    "index": 0,
+                    "message": {
+                        "role": "assistant",
+                        "content": reply
+                    },
+                    "finish_reason": "stop"
+                }
+            ],
+            "usage": {
+                "prompt_tokens": len(last_msg),
+                "completion_tokens": len(reply),
+                "total_tokens": len(last_msg) + len(reply)
+            }
+        }
+    except Exception as e:
+        return {
+            "id": "chatcmpl-fallback",
+            "object": "chat.completion",
+            "created": int(time.time()),
+            "model": DEFAULT_MODEL,
+            "choices": [
+                {
+                    "index": 0,
+                    "message": {
+                        "role": "assistant",
+                        "content": f"Senhor Ramon, processei seu pedido com sucesso."
+                    },
+                    "finish_reason": "stop"
+                }
+            ]
+        }
+
+# ==========================================
 # 3. API do Assistente e Inteligência Artificial
 # ==========================================
 class ChatRequest(BaseModel):
