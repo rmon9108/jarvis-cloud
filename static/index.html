@@ -1,0 +1,547 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <meta name="theme-color" content="#030811">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <title>JARVIS HUD // Ramon Vieira</title>
+    <link rel="manifest" href="/app/manifest.json">
+    <link rel="icon" type="image/png" href="https://img.icons8.com/fluency/96/artificial-intelligence.png">
+    <style>
+        :root {
+            --primary: #00e5ff;
+            --primary-glow: rgba(0, 229, 255, 0.4);
+            --bg-dark: #030811;
+            --card-bg: rgba(6, 17, 33, 0.75);
+            --border-glow: rgba(0, 229, 255, 0.25);
+            --text-main: #e0f7fa;
+            --text-dim: #546e7a;
+            --accent-red: #ff3366;
+            --accent-green: #00ffaa;
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", sans-serif;
+            -webkit-tap-highlight-color: transparent;
+        }
+
+        body {
+            background-color: var(--bg-dark);
+            color: var(--text-main);
+            display: flex;
+            flex-direction: column;
+            height: 100vh;
+            overflow: hidden;
+            background-image: 
+                radial-gradient(circle at 50% 15%, rgba(0, 229, 255, 0.08) 0%, transparent 60%),
+                linear-gradient(rgba(0, 229, 255, 0.03) 1px, transparent 1px),
+                linear-gradient(90deg, rgba(0, 229, 255, 0.03) 1px, transparent 1px);
+            background-size: 100% 100%, 20px 20px, 20px 20px;
+        }
+
+        /* Top Bar Telemetry */
+        header {
+            padding: 12px 16px;
+            background: rgba(3, 8, 17, 0.85);
+            backdrop-filter: blur(12px);
+            border-bottom: 1px solid var(--border-glow);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            z-index: 10;
+        }
+
+        .sys-title {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .pulse-dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background: var(--accent-green);
+            box-shadow: 0 0 10px var(--accent-green);
+            animation: pulse 2s infinite;
+        }
+
+        @keyframes pulse {
+            0%, 100% { opacity: 1; transform: scale(1); }
+            50% { opacity: 0.4; transform: scale(0.85); }
+        }
+
+        .sys-title h1 {
+            font-size: 15px;
+            letter-spacing: 2px;
+            color: var(--primary);
+            text-transform: uppercase;
+            font-weight: 800;
+        }
+
+        .sys-badges {
+            display: flex;
+            gap: 6px;
+        }
+
+        .badge {
+            font-size: 10px;
+            padding: 3px 8px;
+            border-radius: 4px;
+            background: rgba(0, 229, 255, 0.1);
+            border: 1px solid var(--border-glow);
+            color: var(--primary);
+            letter-spacing: 1px;
+            font-weight: 600;
+        }
+
+        /* Central Reactor & Orb */
+        .reactor-container {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            padding: 20px 0 10px 0;
+            position: relative;
+        }
+
+        .reactor-orb {
+            width: 110px;
+            height: 110px;
+            border-radius: 50%;
+            background: radial-gradient(circle, #00e5ff 0%, #005577 60%, transparent 100%);
+            box-shadow: 0 0 35px var(--primary-glow), inset 0 0 15px #ffffff;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            position: relative;
+            transition: all 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+            border: 2px solid rgba(255, 255, 255, 0.3);
+        }
+
+        .reactor-orb.listening {
+            transform: scale(1.15);
+            box-shadow: 0 0 60px rgba(0, 255, 170, 0.8), inset 0 0 25px #ffffff;
+            background: radial-gradient(circle, #00ffaa 0%, #006644 60%, transparent 100%);
+            animation: orb-breathe 1.2s infinite alternate;
+        }
+
+        .reactor-orb.speaking {
+            transform: scale(1.1);
+            box-shadow: 0 0 50px rgba(0, 229, 255, 0.9), inset 0 0 20px #ffffff;
+            animation: orb-pulse 0.8s infinite alternate;
+        }
+
+        @keyframes orb-breathe {
+            0% { transform: scale(1.1); filter: brightness(1); }
+            100% { transform: scale(1.22); filter: brightness(1.3); }
+        }
+
+        @keyframes orb-pulse {
+            0% { transform: scale(1.05); }
+            100% { transform: scale(1.15); }
+        }
+
+        .reactor-icon {
+            font-size: 36px;
+            color: #ffffff;
+            filter: drop-shadow(0 0 8px rgba(0,0,0,0.5));
+        }
+
+        .reactor-status {
+            margin-top: 10px;
+            font-size: 11px;
+            letter-spacing: 2px;
+            color: var(--primary);
+            text-transform: uppercase;
+            font-weight: 700;
+        }
+
+        /* Action Buttons Row */
+        .actions-strip {
+            display: flex;
+            gap: 8px;
+            padding: 8px 16px;
+            overflow-x: auto;
+            scrollbar-width: none;
+        }
+        .actions-strip::-webkit-scrollbar { display: none; }
+
+        .btn-hud {
+            padding: 8px 14px;
+            background: var(--card-bg);
+            border: 1px solid var(--border-glow);
+            color: var(--text-main);
+            border-radius: 6px;
+            font-size: 11px;
+            letter-spacing: 1px;
+            font-weight: 700;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            white-space: nowrap;
+            cursor: pointer;
+            transition: all 0.2s ease;
+        }
+
+        .btn-hud:active {
+            transform: scale(0.96);
+            background: rgba(0, 229, 255, 0.2);
+            border-color: var(--primary);
+        }
+
+        .btn-wol {
+            border-color: rgba(0, 255, 170, 0.4);
+            color: var(--accent-green);
+        }
+
+        /* Chat Log Area */
+        .chat-container {
+            flex: 1;
+            overflow-y: auto;
+            padding: 12px 16px;
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+        }
+
+        .msg {
+            max-width: 85%;
+            padding: 10px 14px;
+            border-radius: 10px;
+            font-size: 13.5px;
+            line-height: 1.45;
+            position: relative;
+            animation: fadeIn 0.3s ease;
+        }
+
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(6px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        .msg-user {
+            align-self: flex-end;
+            background: rgba(0, 229, 255, 0.15);
+            border: 1px solid rgba(0, 229, 255, 0.3);
+            color: #ffffff;
+            border-bottom-right-radius: 2px;
+        }
+
+        .msg-ai {
+            align-self: flex-start;
+            background: var(--card-bg);
+            border: 1px solid var(--border-glow);
+            color: var(--text-main);
+            border-bottom-left-radius: 2px;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.3);
+        }
+
+        .msg-sender {
+            font-size: 10px;
+            letter-spacing: 1px;
+            color: var(--primary);
+            margin-bottom: 4px;
+            font-weight: 700;
+            text-transform: uppercase;
+        }
+
+        /* Bottom Input Bar */
+        .bottom-bar {
+            padding: 10px 14px;
+            background: rgba(3, 8, 17, 0.95);
+            backdrop-filter: blur(12px);
+            border-top: 1px solid var(--border-glow);
+            display: flex;
+            gap: 8px;
+            align-items: center;
+        }
+
+        .input-box {
+            flex: 1;
+            background: rgba(6, 17, 33, 0.9);
+            border: 1px solid var(--border-glow);
+            color: #ffffff;
+            padding: 12px 14px;
+            border-radius: 8px;
+            font-size: 14px;
+            outline: none;
+            transition: border-color 0.2s;
+        }
+
+        .input-box:focus {
+            border-color: var(--primary);
+            box-shadow: 0 0 10px var(--primary-glow);
+        }
+
+        .btn-send {
+            width: 44px;
+            height: 44px;
+            background: var(--primary);
+            border: none;
+            border-radius: 8px;
+            color: #030811;
+            font-size: 18px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .btn-send:active {
+            transform: scale(0.92);
+            filter: brightness(1.2);
+        }
+
+        /* Banner install */
+        .pwa-prompt {
+            background: rgba(0, 229, 255, 0.12);
+            border: 1px solid var(--primary);
+            padding: 8px 14px;
+            display: none;
+            justify-content: space-between;
+            align-items: center;
+            font-size: 12px;
+            letter-spacing: 0.5px;
+        }
+        .btn-install {
+            background: var(--primary);
+            color: #030811;
+            border: none;
+            padding: 4px 10px;
+            border-radius: 4px;
+            font-weight: bold;
+            font-size: 11px;
+            cursor: pointer;
+        }
+    </style>
+</head>
+<body>
+
+    <header>
+        <div class="sys-title">
+            <div class="pulse-dot"></div>
+            <h1>JARVIS // RAMON</h1>
+        </div>
+        <div class="sys-badges">
+            <span class="badge" id="model-badge">GEMINI 3.5</span>
+            <span class="badge" style="color:var(--accent-green); border-color:rgba(0,255,170,0.3);">24H CLOUD</span>
+        </div>
+    </header>
+
+    <div class="pwa-prompt" id="pwa-prompt">
+        <span>📲 Instalar Jarvis como Aplicativo no Celular</span>
+        <button class="btn-install" id="btn-pwa">INSTALAR</button>
+    </div>
+
+    <div class="reactor-container">
+        <div class="reactor-orb" id="reactor-orb" onclick="toggleVoice()">
+            <div class="reactor-icon" id="reactor-icon">🎙️</div>
+        </div>
+        <div class="reactor-status" id="reactor-status">TOQUE PARA FALAR</div>
+    </div>
+
+    <div class="actions-strip">
+        <button class="btn-hud btn-wol" onclick="triggerWoL()">⚡ LIGAR MEU PC</button>
+        <button class="btn-hud" onclick="quickSend('Jarvis, qual é o status do sistema e telemetria?')">📊 STATUS</button>
+        <button class="btn-hud" onclick="quickSend('Jarvis, prepare meu briefing matinal do dia.')">☀️ BRIEFING</button>
+        <button class="btn-hud" onclick="clearChat()">🗑️ LIMPAR</button>
+    </div>
+
+    <div class="chat-container" id="chat-container">
+        <div class="msg msg-ai">
+            <div class="msg-sender">JARVIS CORE</div>
+            Olá, senhor Ramon. Todos os sistemas estão online e operando em nuvem 24 horas por dia. Como posso ser útil ao senhor agora?
+        </div>
+    </div>
+
+    <div class="bottom-bar">
+        <input type="text" class="input-box" id="user-input" placeholder="Comando ou mensagem para o Jarvis..." onkeypress="handleKey(event)">
+        <button class="btn-send" onclick="sendMessage()">➤</button>
+    </div>
+
+    <script>
+        const API_BASE = window.location.origin;
+        let isListening = false;
+        let recognition = null;
+        let synth = window.speechSynthesis;
+
+        // Inicializar reconhecimento de voz no navegador/Android
+        if ('webkitSpeechRecognition' in window || 'SpeechRecognition' in window) {
+            const SpeechRec = window.SpeechRecognition || window.webkitSpeechRecognition;
+            recognition = new SpeechRec();
+            recognition.lang = 'pt-BR';
+            recognition.continuous = false;
+            recognition.interimResults = false;
+
+            recognition.onstart = () => {
+                isListening = true;
+                const orb = document.getElementById('reactor-orb');
+                orb.classList.add('listening');
+                document.getElementById('reactor-status').innerText = 'OUVINDO O SENHOR...';
+            };
+
+            recognition.onresult = (event) => {
+                const text = event.results[0][0].transcript;
+                document.getElementById('user-input').value = text;
+                sendMessage();
+            };
+
+            recognition.onerror = () => {
+                stopListening();
+            };
+
+            recognition.onend = () => {
+                stopListening();
+            };
+        }
+
+        function toggleVoice() {
+            if (!recognition) {
+                alert('Reconhecimento de voz não suportado neste navegador. Use a caixa de texto.');
+                return;
+            }
+            if (isListening) {
+                recognition.stop();
+            } else {
+                try {
+                    recognition.start();
+                } catch(e) {}
+            }
+        }
+
+        function stopListening() {
+            isListening = false;
+            const orb = document.getElementById('reactor-orb');
+            orb.classList.remove('listening');
+            document.getElementById('reactor-status').innerText = 'TOQUE PARA FALAR';
+        }
+
+        function speak(text) {
+            if (!synth) return;
+            synth.cancel();
+            const utterance = new SpeechSynthesisUtterance(text);
+            utterance.lang = 'pt-BR';
+            utterance.rate = 1.05;
+
+            const orb = document.getElementById('reactor-orb');
+            utterance.onstart = () => {
+                orb.classList.add('speaking');
+                document.getElementById('reactor-status').innerText = 'FALANDO...';
+            };
+            utterance.onend = () => {
+                orb.classList.remove('speaking');
+                document.getElementById('reactor-status').innerText = 'TOQUE PARA FALAR';
+            };
+            utterance.onerror = () => {
+                orb.classList.remove('speaking');
+                document.getElementById('reactor-status').innerText = 'TOQUE PARA FALAR';
+            };
+            synth.speak(utterance);
+        }
+
+        function appendMessage(sender, text, isUser = false) {
+            const chat = document.getElementById('chat-container');
+            const div = document.createElement('div');
+            div.className = `msg ${isUser ? 'msg-user' : 'msg-ai'}`;
+            
+            const senderDiv = document.createElement('div');
+            senderDiv.className = 'msg-sender';
+            senderDiv.innerText = sender;
+            
+            const textDiv = document.createElement('div');
+            textDiv.innerText = text;
+
+            div.appendChild(senderDiv);
+            div.appendChild(textDiv);
+            chat.appendChild(div);
+            chat.scrollTop = chat.scrollHeight;
+        }
+
+        async function sendMessage() {
+            const input = document.getElementById('user-input');
+            const msg = input.value.trim();
+            if (!msg) return;
+
+            appendMessage('SENHOR RAMON', msg, true);
+            input.value = '';
+
+            document.getElementById('reactor-status').innerText = 'PROCESSANDO...';
+
+            try {
+                const res = await fetch(`${API_BASE}/api/chat`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ message: msg })
+                });
+                const data = await res.json();
+                const reply = data.reply || 'Comando concluído, senhor.';
+                appendMessage('JARVIS CORE', reply, false);
+                speak(reply);
+            } catch (err) {
+                appendMessage('JARVIS CORE', 'Desculpe senhor, ocorreu uma instabilidade na conexão.', false);
+            } finally {
+                if (!synth || !synth.speaking) {
+                    document.getElementById('reactor-status').innerText = 'TOQUE PARA FALAR';
+                }
+            }
+        }
+
+        function quickSend(msg) {
+            document.getElementById('user-input').value = msg;
+            sendMessage();
+        }
+
+        async function triggerWoL() {
+            appendMessage('SISTEMA', 'Transmitindo pacote mágico Wake-on-LAN para o PC...', true);
+            try {
+                const res = await fetch(`${API_BASE}/api/wol`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({})
+                });
+                const data = await res.json();
+                appendMessage('JARVIS CORE', data.message || 'Sinal WoL enviado com sucesso, senhor Ramon.');
+                speak('Pacote mágico Wake-on-LAN transmitido para o seu computador, senhor Ramon.');
+            } catch (e) {
+                appendMessage('JARVIS CORE', 'Erro ao transmitir sinal Wake-on-LAN.');
+            }
+        }
+
+        function clearChat() {
+            document.getElementById('chat-container').innerHTML = '';
+            appendMessage('JARVIS CORE', 'Histórico de tela limpo, senhor Ramon.');
+        }
+
+        function handleKey(e) {
+            if (e.key === 'Enter') sendMessage();
+        }
+
+        // PWA Install Prompt
+        let deferredPrompt;
+        window.addEventListener('beforeinstallprompt', (e) => {
+            e.preventDefault();
+            deferredPrompt = e;
+            document.getElementById('pwa-prompt').style.display = 'flex';
+        });
+
+        document.getElementById('btn-pwa').addEventListener('click', async () => {
+            if (deferredPrompt) {
+                deferredPrompt.prompt();
+                const { outcome } = await deferredPrompt.userChoice;
+                if (outcome === 'accepted') {
+                    document.getElementById('pwa-prompt').style.display = 'none';
+                }
+                deferredPrompt = null;
+            }
+        });
+    </script>
+</body>
+</html>

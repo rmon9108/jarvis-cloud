@@ -6,6 +6,8 @@ from pathlib import Path
 from typing import Optional, List, Dict, Any
 from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import FileResponse
+from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
 app = FastAPI(
@@ -13,6 +15,25 @@ app = FastAPI(
     description="Backend 24/7 autônomo para o assistente pessoal do senhor Ramon",
     version="1.0.0"
 )
+
+STATIC_DIR = Path(__file__).resolve().parent / "static"
+if STATIC_DIR.exists():
+    app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
+
+@app.get("/app")
+@app.get("/app/")
+def get_app_ui():
+    index_file = STATIC_DIR / "index.html"
+    if index_file.exists():
+        return FileResponse(str(index_file))
+    return {"message": "Interface em carregamento"}
+
+@app.get("/app/manifest.json")
+def get_manifest():
+    manifest_file = STATIC_DIR / "manifest.json"
+    if manifest_file.exists():
+        return FileResponse(str(manifest_file), media_type="application/manifest+json")
+    return {}
 
 # Habilitar CORS para o aplicativo mobile (APK) e dashboard
 app.add_middleware(
