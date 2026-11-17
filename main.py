@@ -16,7 +16,7 @@ from pydantic import BaseModel
 app = FastAPI(
     title="Jarvis Cloud Core",
     description="Backend 24/7 autônomo para o assistente pessoal do senhor Ramon",
-    version="1.1.0"
+    version="1.2.0"
 )
 
 app.add_middleware(
@@ -189,7 +189,7 @@ async def openai_chat_completions(req: Request):
             )
             return JSONResponse(content=upstream.json(), status_code=upstream.status_code)
 
-    except Exception as e:
+    except Exception:
         # Fallback gracioso
         if is_stream:
             def err_stream():
@@ -220,7 +220,7 @@ async def openai_chat_completions(req: Request):
         }
 
 # ==========================================
-# 4. OpenAI / Torvis Compatible TTS Endpoint (Voz)
+# 4. OpenAI / Torvis Compatible TTS Endpoint (Voz Falada)
 # ==========================================
 @app.post("/v1/audio/speech")
 @app.post("/audio/speech")
@@ -234,7 +234,6 @@ async def openai_audio_speech(req: Request):
     if not text_to_speak:
         text_to_speak = "Compreendido, senhor Ramon."
 
-    # Limita tamanho para evitar quebras em URLs de TTS
     text_encoded = urllib.parse.quote(text_to_speak[:400])
     tts_url = f"https://translate.google.com/translate_tts?ie=UTF-8&q={text_encoded}&tl=pt-BR&client=tw-ob"
 
@@ -249,14 +248,64 @@ async def openai_audio_speech(req: Request):
     except Exception:
         pass
 
-    # Retorna áudio silencioso mínimo se falhar
     silent_mp3 = bytes.fromhex(
         "FFF324C40000000348000000004C414D45332E39382E320000000000000000000000000000000000"
     )
     return Response(content=silent_mp3, media_type="audio/mpeg")
 
 # ==========================================
-# 5. API Mobile & HUD do Assistente (PWA)
+# 5. OpenAI / Torvis Compatible STT Endpoint (Reconhecimento de Voz Whisper)
+# ==========================================
+@app.post("/v1/audio/transcriptions")
+@app.post("/audio/transcriptions")
+async def openai_audio_transcriptions(req: Request):
+    try:
+        content_type = req.headers.get("content-type", "")
+        audio_bytes = b""
+        
+        if "multipart/form-data" in content_type:
+            try:
+                form = await req.form()
+                for key, val in form.items():
+                    if hasattr(val, "read"):
+                        audio_bytes = await val.read()
+                        break
+            except Exception:
+                pass
+        
+        if not audio_bytes:
+            raw = await req.body()
+            if b"RIFF" in raw:
+                idx = raw.find(b"RIFF")
+                audio_bytes = raw[idx:]
+            else:
+                audio_bytes = raw
+
+        if not audio_bytes or len(audio_bytes) < 800:
+            return {"text": ""}
+
+        from google import genai
+        from google.genai import types
+        client = genai.Client(api_key=DEFAULT_GEMINI_KEY)
+        part = types.Part.from_bytes(data=audio_bytes, mime_type="audio/wav")
+        prompt = (
+            "Transcreva com máxima precisão exatamente o que foi dito neste áudio em português. "
+            "Se for apenas ruído ambiente, respiração, clique ou silêncio, retorne exatamente uma string vazia. "
+            "Retorne APENAS o texto falado, sem prefixos, explicações ou aspas."
+        )
+        resp = client.models.generate_content(
+            model="gemini-2.5-flash",
+            contents=[part, prompt]
+        )
+        text = resp.text.strip() if resp and resp.text else ""
+        if text.lower() in ["vazio", "silêncio", "vazio.", "silencio", "silêncio."]:
+            text = ""
+        return {"text": text}
+    except Exception:
+        return {"text": ""}
+
+# ==========================================
+# 6. API Mobile & HUD do Assistente (PWA)
 # ==========================================
 class ChatRequest(BaseModel):
     message: str
