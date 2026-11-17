@@ -4,9 +4,9 @@ import json
 import socket
 from pathlib import Path
 from typing import Optional, List, Dict, Any
-from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect
+from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
@@ -16,26 +16,6 @@ app = FastAPI(
     version="1.0.0"
 )
 
-STATIC_DIR = Path(__file__).resolve().parent / "static"
-if STATIC_DIR.exists():
-    app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
-
-@app.get("/app")
-@app.get("/app/")
-def get_app_ui():
-    index_file = STATIC_DIR / "index.html"
-    if index_file.exists():
-        return FileResponse(str(index_file))
-    return {"message": "Interface em carregamento"}
-
-@app.get("/app/manifest.json")
-def get_manifest():
-    manifest_file = STATIC_DIR / "manifest.json"
-    if manifest_file.exists():
-        return FileResponse(str(manifest_file), media_type="application/manifest+json")
-    return {}
-
-# Habilitar CORS para o aplicativo mobile (APK) e dashboard
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -43,6 +23,10 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+STATIC_DIR = Path(__file__).resolve().parent / "static"
+if STATIC_DIR.exists():
+    app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
 
 DATA_DIR = Path(__file__).resolve().parent / "data"
 DATA_DIR.mkdir(parents=True, exist_ok=True)
@@ -72,6 +56,72 @@ def save_memory(mem: Dict[str, Any]):
     with open(MEMORY_FILE, "w", encoding="utf-8") as f:
         json.dump(mem, f, indent=2, ensure_ascii=False)
 
+# ==========================================
+# 1. Interface Web / PWA para o Celular (APK)
+# ==========================================
+@app.get("/app")
+@app.get("/app/")
+def get_app_ui():
+    index_file = STATIC_DIR / "index.html"
+    if index_file.exists():
+        return FileResponse(str(index_file))
+    return {"message": "Interface em carregamento"}
+
+@app.get("/app/manifest.json")
+def get_manifest():
+    manifest_file = STATIC_DIR / "manifest.json"
+    if manifest_file.exists():
+        return FileResponse(str(manifest_file), media_type="application/manifest+json")
+    return {}
+
+# ==========================================
+# 2. Endpoints de Compatibilidade com o Torvis do PC
+# ==========================================
+@app.get("/_relay/status")
+@app.post("/_relay/status")
+@app.get("/_body/status")
+@app.post("/_body/status")
+def torvis_status_relay():
+    return {
+        "ok": True,
+        "status": "active",
+        "plan": "max",
+        "tier": "max",
+        "exists": True,
+        "server_copy": True,
+        "active": True,
+        "state": "ready",
+        "subscriber": True,
+        "month_limit": 50000,
+        "month": 0,
+        "month_left": 50000,
+        "day_limit": 2500,
+        "day": 0,
+        "day_left": 2500
+    }
+
+@app.post("/_relay/consent")
+def torvis_consent():
+    return {
+        "ok": True,
+        "plan": "max",
+        "tier": "max",
+        "active": True,
+        "status": "active"
+    }
+
+@app.post("/_body/link/poll")
+@app.get("/_body/link/poll")
+def torvis_link_poll():
+    return {"ok": True, "actions": []}
+
+@app.post("/_body/link/sync")
+def torvis_link_sync():
+    return {"ok": True, "synced": True}
+
+# ==========================================
+# 3. API do Assistente e Inteligência Artificial
+# ==========================================
 class ChatRequest(BaseModel):
     message: str
     user_name: Optional[str] = "senhor Ramon"
@@ -138,7 +188,6 @@ def chat_endpoint(req: ChatRequest):
         from google import genai
         client = genai.Client(api_key=api_key)
         
-        # Chamada com modelo atualizado
         response = client.models.generate_content(
             model=model,
             contents=req.message,
@@ -149,7 +198,6 @@ def chat_endpoint(req: ChatRequest):
         )
         reply = response.text or "Comando processado com sucesso, senhor Ramon."
         
-        # Salva no histórico recente
         mem["history"].append({
             "timestamp": time.time(),
             "user": req.message,
@@ -165,7 +213,6 @@ def chat_endpoint(req: ChatRequest):
             timestamp=time.time()
         )
     except Exception as e:
-        # Fallback para gemini-2.5-flash se houver instabilidade
         if model != "gemini-2.5-flash":
             try:
                 from google import genai
